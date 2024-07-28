@@ -3,8 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Formulaire de Participants</title>
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap">
+    <title>Formulaire de Participants B2B</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -35,12 +34,15 @@
                 <button type="submit" class="btn submit-btn">Soumettre</button>
             </div>
         </form>
+        <div id="participantList">
+            <!-- La liste des participants sera affichée ici -->
+        </div>
     </div>
 
     <script>
         let participantCount = 1;
+        let participantsData = [];
 
-        // Fonction pour ajouter un participant
         function addParticipant() {
             participantCount++;
             const participantsDiv = document.getElementById('participants');
@@ -64,19 +66,23 @@
             participantsDiv.appendChild(newParticipantDiv);
         }
 
-        // Fonction pour extraire le paramètre de session de l'URL
         function getSessionFromUrl() {
             const urlParams = new URLSearchParams(window.location.search);
             return urlParams.get('prefill_Session');
         }
 
-        // Fonction de soumission du formulaire
+        window.onload = function() {
+            const sessionParam = getSessionFromUrl();
+            if (sessionParam) {
+                document.getElementById('session').value = sessionParam;
+            }
+        };
+
         document.getElementById('participantForm').addEventListener('submit', async function(event) {
             event.preventDefault();
 
             const formData = new FormData(this);
             const session = document.getElementById('session').value || getSessionFromUrl();
-            console.log('Session ID:', session); // Journal de débogage
 
             const participants = [];
             const noms = formData.getAll('nom[]');
@@ -86,18 +92,15 @@
             for (let i = 0; i < noms.length; i++) {
                 participants.push({
                     fields: {
-                        'fldrEILIREtmotmaA': noms[i], // Nom
-                        'fldLAhoY9XlrDiA1D': prenoms[i], // Prénom
-                        'fldvvnCAJn0OcnKzu': emails[i], // Email
-                        'fldjmajfL0JRIY7pc': [session] // Session (Link to Record)
+                        'fldrEILIREtmotmaA': noms[i],
+                        'fldLAhoY9XlrDiA1D': prenoms[i],
+                        'fldvvnCAJn0OcnKzu': emails[i],
+                        'fldjmajfL0JRIY7pc': [session]
                     }
                 });
             }
 
-            console.log('Participants:', participants); // Journal de débogage
-
             try {
-                console.log('Sending request to Airtable API...');
                 const response = await fetch('https://api.airtable.com/v0/appk9mi6lyasLbbVI/tbleKiLSYWhqSDZme', {
                     method: 'POST',
                     headers: {
@@ -106,12 +109,12 @@
                     },
                     body: JSON.stringify({ records: participants })
                 });
-                console.log('Request sent, awaiting response...');
 
                 if (response.ok) {
                     const jsonResponse = await response.json();
-                    console.log('Réponse API OK', jsonResponse); // Journal de débogage
                     alert('Participants ajoutés avec succès');
+                    participantsData = jsonResponse.records;
+                    displayParticipants();
                     document.getElementById('participantForm').reset();
                     participantCount = 1;
                     document.getElementById('participants').innerHTML = `
@@ -133,23 +136,57 @@
                     `;
                 } else {
                     const errorData = await response.json();
-                    console.error('Erreur API', errorData); // Journal de débogage
                     alert(`Erreur lors de l'ajout des participants : ${errorData.message}`);
                 }
             } catch (error) {
-                console.error('Erreur Fetch', error); // Journal de débogage
                 alert('Erreur lors de l\'ajout des participants');
             }
         });
 
-        // Définir le paramètre de session dans le champ caché
-        window.onload = function() {
-            const sessionParam = getSessionFromUrl();
-            console.log('Loaded Session ID:', sessionParam); // Journal de débogage
-            if (sessionParam) {
-                document.getElementById('session').value = sessionParam;
+        function displayParticipants() {
+            const participantListDiv = document.getElementById('participantList');
+            participantListDiv.innerHTML = '';
+            participantsData.forEach((participant, index) => {
+                const participantDiv = document.createElement('div');
+                participantDiv.classList.add('participant-item');
+                participantDiv.innerHTML = `
+                    <h2>${participant.fields['fldrEILIREtmotmaA']} ${participant.fields['fldLAhoY9XlrDiA1D']}</h2>
+                    <p>Email: ${participant.fields['fldvvnCAJn0OcnKzu']}</p>
+                    <button onclick="editParticipant(${index})">Modifier</button>
+                    <button onclick="deleteParticipant('${participant.id}')">Supprimer</button>
+                `;
+                participantListDiv.appendChild(participantDiv);
+            });
+        }
+
+        function editParticipant(index) {
+            const participant = participantsData[index];
+            document.querySelector('[name="nom[]"]').value = participant.fields['fldrEILIREtmotmaA'];
+            document.querySelector('[name="prenom[]"]').value = participant.fields['fldLAhoY9XlrDiA1D'];
+            document.querySelector('[name="email[]"]').value = participant.fields['fldvvnCAJn0OcnKzu'];
+            document.getElementById('participantForm').innerHTML += `<input type="hidden" name="record_id" value="${participant.id}">`;
+        }
+
+        async function deleteParticipant(recordId) {
+            try {
+                const response = await fetch(`https://api.airtable.com/v0/appk9mi6lyasLbbVI/tbleKiLSYWhqSDZme/${recordId}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Authorization': 'Bearer patxU8J5rq06VHVzD.5159bc1cb85ea7dc86dcf5f9e937667f0efff78f0bece44328a4dcacfccfa07e'
+                    }
+                });
+
+                if (response.ok) {
+                    alert('Participant supprimé avec succès');
+                    participantsData = participantsData.filter(participant => participant.id !== recordId);
+                    displayParticipants();
+                } else {
+                    alert('Erreur lors de la suppression du participant');
+                }
+            } catch (error) {
+                alert('Erreur lors de la suppression du participant');
             }
-        };
+        }
     </script>
 </body>
 </html>
